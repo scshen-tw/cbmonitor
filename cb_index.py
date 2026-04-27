@@ -18,6 +18,8 @@ START_DATE = "2015-01-01"
 DEFAULTS = dict(
     maxPrice    = 200,
     minMaturity = 90,
+    parityLo    = 95,
+    parityHi    = 105,
 )
 
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -75,10 +77,11 @@ def prepare_raw_json(df: pd.DataFrame) -> str:
     df["_u"]  = df["unit"].clip(0, 65535).astype(int)
     df["_v"]  = (df["v5"] * 10).round().clip(0, 65535).astype(int)
     df["_p"]  = (df["prem"] * 10000).fillna(-9999).round().clip(-9999, 99999).astype(int)
+    df["_pa"] = (df["parity"] * 10).fillna(-1).round().clip(-1, 99999).astype(int)
     df["_dl"] = df["dl"].fillna(-1).astype(int)
     df["_o"]  = ((df["OutstandingAmount"].fillna(0) / 1e7) * 10
                  ).round().clip(0, 999999).astype(int)
-    rows = df[["di","ci","_c","_u","_v","_p","_dl","_o"]].values.tolist()
+    rows = df[["di","ci","_c","_u","_v","_p","_pa","_dl","_o"]].values.tolist()
     return json.dumps({"dates": dates, "cbids": cbids, "rows": rows}, separators=(",", ":"))
 
 
@@ -228,6 +231,14 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
           <input type="number" id="f-minMaturity" min="0" max="730" step="5" value="__minMaturity__"
                  onchange="syncVal('minMaturity',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以下</span></div>
+        <div class="f-row"><label>溢價 parity</label>
+          <input type="number" id="f-parityLo" min="0" max="300" step="1" value="__parityLo__"
+                 onchange="syncVal('parityLo',+this.value)" onkeydown="enterApply(event)">
+          <span class="f-suffix">以上</span></div>
+        <div class="f-row"><label>溢價 parity</label>
+          <input type="number" id="f-parityHi" min="0" max="300" step="1" value="__parityHi__"
+                 onchange="syncVal('parityHi',+this.value)" onkeydown="enterApply(event)">
+          <span class="f-suffix">以下</span></div>
       </div>
       <button id="btn-apply" onclick="applyFilters()">套用 重新計算</button>
       <button id="btn-reset" onclick="resetFilters()">恢復預設值</button>
@@ -346,7 +357,7 @@ function median(a) {
 
 function computeAll() {
   const N = _RAW.dates.length;
-  const {maxPrice,minMaturity} = cfg;
+  const {maxPrice,minMaturity,parityLo,parityHi} = cfg;
   const bd=[],bMed=[],bMean=[],bCnt=[];
   const pd=[],pMed=[],pMean=[],pCnt=[];
   const rd=[],rEq=[],rSize=[],rCnt=[];
@@ -361,14 +372,15 @@ function computeAll() {
     const bA=[], pA=[];
     let retSum=0, retN=0, retW=0, retWSum=0;
     const currentClose = [];
-    for (const [,ci,c,u,,p,dl,o] of rows) {
+    for (const [,ci,c,u,,p,pa,dl,o] of rows) {
       if(u<=0) continue;
       const cl=c/10;
       currentClose.push([ci,cl]);
       if(cl>=maxPrice) continue;
       if(dl>=0&&dl<=minMaturity) continue;
       bA.push(cl);
-      if(p!==-9999) pA.push(p/10000);
+      const parity=pa/10;
+      if(p!==-9999 && parity>=parityLo && parity<=parityHi) pA.push(p/10000);
       const prev = prevClose.get(ci);
       if(prev>0){
         const ret = cl/prev - 1;
