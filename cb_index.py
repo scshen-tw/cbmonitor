@@ -18,13 +18,13 @@ MARKET_START_DATE = "2003-01-01"
 DBDOWNLOADER_DIR = Path(r"d:\VS Code\dbdownloader")
 
 DEFAULTS = dict(
-    useMaxPrice = True,
+    useMaxPrice = False,
     maxPrice    = 200,
-    useMinMaturity = True,
+    useMinMaturity = False,
     minMaturity = 90,
-    useParityLo = True,
+    useParityLo = False,
     parityLo    = 95,
-    useParityHi = True,
+    useParityHi = False,
     parityHi    = 105,
     highPriceThreshold = 130,
 )
@@ -279,23 +279,23 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
       <h2>篩選條件</h2>
       <div class="f-section">
         <h3>套用全部圖表</h3>
-        <div class="f-note">影響：市場廣度、全市場溢價率、疊加圖、CB報酬指數</div>
-        <div class="f-row"><input type="checkbox" id="f-useMaxPrice" checked onchange="syncVal('useMaxPrice',this.checked)">
+        <div class="f-note">影響：市場廣度、全市場溢價率、疊加圖、CB報酬指數、CB高價比例</div>
+        <div class="f-row"><input type="checkbox" id="f-useMaxPrice" onchange="syncVal('useMaxPrice',this.checked)">
           <label>剔除收盤價</label>
           <input type="number" id="f-maxPrice" min="100" max="500" step="5" value="__maxPrice__"
                  onchange="syncVal('maxPrice',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以上</span></div>
-        <div class="f-row"><input type="checkbox" id="f-useMinMaturity" checked onchange="syncVal('useMinMaturity',this.checked)">
+        <div class="f-row"><input type="checkbox" id="f-useMinMaturity" onchange="syncVal('useMinMaturity',this.checked)">
           <label>剔除剩餘天數</label>
           <input type="number" id="f-minMaturity" min="0" max="730" step="5" value="__minMaturity__"
                  onchange="syncVal('minMaturity',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以下</span></div>
-        <div class="f-row"><input type="checkbox" id="f-useParityLo" checked onchange="syncVal('useParityLo',this.checked)">
+        <div class="f-row"><input type="checkbox" id="f-useParityLo" onchange="syncVal('useParityLo',this.checked)">
           <label>parity</label>
           <input type="number" id="f-parityLo" min="0" max="300" step="1" value="__parityLo__"
                  onchange="syncVal('parityLo',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以上</span></div>
-        <div class="f-row"><input type="checkbox" id="f-useParityHi" checked onchange="syncVal('useParityHi',this.checked)">
+        <div class="f-row"><input type="checkbox" id="f-useParityHi" onchange="syncVal('useParityHi',this.checked)">
           <label>parity</label>
           <input type="number" id="f-parityHi" min="0" max="300" step="1" value="__parityHi__"
                  onchange="syncVal('parityHi',+this.value)" onkeydown="enterApply(event)">
