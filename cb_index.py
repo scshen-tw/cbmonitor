@@ -169,6 +169,7 @@ header{flex-shrink:0;padding:9px 16px;display:flex;
 .f-section{margin-bottom:14px}
 .f-section h3{font-size:.78rem;font-weight:600;padding:3px 8px;
   border-radius:3px;margin-bottom:8px}
+.f-note{font-size:.7rem;line-height:1.35;margin:-2px 0 8px;color:#777}
 .f-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
 .f-row label{font-size:.75rem;width:108px;flex-shrink:0;line-height:1.3}
 .f-row .f-suffix{font-size:.75rem;white-space:nowrap}
@@ -178,6 +179,7 @@ header{flex-shrink:0;padding:9px 16px;display:flex;
 .f-row input[type=number]:focus{border-color:#3f51b5}
 body.bbg .f-row input[type=number]{background:#1A1A1A;border-color:#333;color:#FF9900}
 body.bbg .f-row input[type=number]:focus{border-color:#FF6600}
+body.bbg .f-note{color:#777}
 #btn-apply,#btn-reset{width:100%;border:none;border-radius:4px;cursor:pointer;font-weight:600}
 #btn-apply{padding:8px;font-size:.85rem;margin-top:8px}
 #btn-reset{padding:5px;font-size:.78rem;margin-top:5px}
@@ -223,6 +225,8 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
     <div id="filter-inner">
       <h2>篩選條件</h2>
       <div class="f-section">
+        <h3>套用全部圖表</h3>
+        <div class="f-note">影響：市場廣度、全市場溢價率、疊加圖、CB報酬指數</div>
         <div class="f-row"><label>剔除收盤價</label>
           <input type="number" id="f-maxPrice" min="100" max="500" step="5" value="__maxPrice__"
                  onchange="syncVal('maxPrice',+this.value)" onkeydown="enterApply(event)">
@@ -231,6 +235,10 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
           <input type="number" id="f-minMaturity" min="0" max="730" step="5" value="__minMaturity__"
                  onchange="syncVal('minMaturity',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以下</span></div>
+      </div>
+      <div class="f-section">
+        <h3>只套用溢價率圖表</h3>
+        <div class="f-note">影響：全市場溢價率、疊加圖中的溢價率線</div>
         <div class="f-row"><label>溢價 parity</label>
           <input type="number" id="f-parityLo" min="0" max="300" step="1" value="__parityLo__"
                  onchange="syncVal('parityLo',+this.value)" onkeydown="enterApply(event)">
