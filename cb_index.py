@@ -590,17 +590,17 @@ function renderOverlay(b,p,r){
 
 function renderReturnIndex(r){
   const traces=[
-    {x:r.dates,y:r.equal,name:'平均報酬指數',type:'scatter',
-     line:{color:T().c1,width:2}},
-    {x:r.dates,y:r.size,name:'發行規模加權報酬指數',type:'scatter',
-     line:{color:T().c3,width:2}},
-    {x:r.dates,y:r.count,name:'有效報酬檔數',type:'bar',yaxis:'y2',
+    {x:r.dates,y:r.count,name:'有效報酬檔數',type:'bar',
      marker:{color:T().bar},hovertemplate:'%{y}檔<extra></extra>'},
+    {x:r.dates,y:r.equal.map(v=>v/100-1),name:'平均累積報酬率',type:'scatter',yaxis:'y2',
+     line:{color:T().c1,width:2}},
+    {x:r.dates,y:r.size.map(v=>v/100-1),name:'發行規模加權累積報酬率',type:'scatter',yaxis:'y2',
+     line:{color:T().c3,width:2}},
   ];
-  const layout=Object.assign(baseLayout('CB 報酬指數 — 平均 vs 發行規模加權',r.dates),{
-    yaxis:  yAxis('報酬指數'),
-    yaxis2: yAxis('有效報酬檔數','right','y'),
-    shapes:[refLine(100,T().annColor[2])],
+  const layout=Object.assign(baseLayout('CB 累積報酬率 — 平均 vs 發行規模加權',r.dates),{
+    yaxis:  yAxis('有效報酬檔數'),
+    yaxis2: Object.assign(yAxis('累積報酬率','right','y'), {tickformat:'.1%'}),
+    shapes:[refLine(0,T().annColor[2],'y2')],
   });
   Plotly.react('plt-return',traces,layout,CFG);
 }
