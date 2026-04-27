@@ -26,6 +26,7 @@ DEFAULTS = dict(
     parityLo    = 95,
     useParityHi = True,
     parityHi    = 105,
+    highPriceThreshold = 130,
 )
 
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -300,6 +301,14 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
                  onchange="syncVal('parityHi',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以下</span></div>
       </div>
+      <div class="f-section">
+        <h3>只套用高價比例圖</h3>
+        <div class="f-note">影響：CB高價比例，不會剔除其他圖表樣本</div>
+        <div class="f-row"><label>高價門檻</label>
+          <input type="number" id="f-highPriceThreshold" min="100" max="500" step="5" value="__highPriceThreshold__"
+                 onchange="syncVal('highPriceThreshold',+this.value)" onkeydown="enterApply(event)">
+          <span class="f-suffix">以上</span></div>
+      </div>
       <button id="btn-apply" onclick="applyFilters()">套用 重新計算</button>
       <button id="btn-reset" onclick="resetFilters()">恢復預設值</button>
       <div class="f-status" id="f-status"></div>
@@ -313,6 +322,7 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
       <button class="tab-btn"        onclick="showTab('premium',this)">② 全市場溢價率</button>
       <button class="tab-btn"        onclick="showTab('overlay',this)">③ 疊加圖</button>
       <button class="tab-btn"        onclick="showTab('returnIdx',this)">④ CB報酬指數</button>
+      <button class="tab-btn"        onclick="showTab('highRatio',this)">⑤ CB高價比例</button>
     </div>
     <div class="chart-area">
       <div id="breadth" class="chart-panel active"><div id="plt-breadth"></div></div>
@@ -343,6 +353,7 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
         <div id="plt-overlay" class="overlay-plot"></div>
       </div>
       <div id="returnIdx" class="chart-panel">    <div id="plt-return"></div></div>
+      <div id="highRatio" class="chart-panel">    <div id="plt-high-ratio"></div></div>
       <div class="hint">
         💡 移至圖表顯示十字線報價 ・ 滾輪縮放 ・ 拖曳平移 ・ 雙擊還原 ・ 底部捲軸瀏覽歷史
       </div>
@@ -423,11 +434,12 @@ function computeAll() {
   const N = _RAW.dates.length;
   const {
     useMaxPrice,maxPrice,useMinMaturity,minMaturity,
-    useParityLo,parityLo,useParityHi,parityHi
+    useParityLo,parityLo,useParityHi,parityHi,highPriceThreshold
   } = cfg;
   const bd=[],bMed=[],bMean=[],bCnt=[];
   const pd=[],pMed=[],pMean=[],pCnt=[];
   const rd=[],rEq=[],rSize=[],rCnt=[];
+  const hd=[],hRatio=[],hHigh=[],hTotal=[];
   const prevClose = new Map();
   let eqIdx=100, sizeIdx=100, started=false;
 
@@ -472,6 +484,10 @@ function computeAll() {
       const s=pA.reduce((a,b)=>a+b,0); pMean.push(s/pA.length);
       pMed.push(median([...pA]));
     }
+    if(bA.length){
+      const highN = bA.filter(v=>v>=highPriceThreshold).length;
+      hd.push(date); hHigh.push(highN); hTotal.push(bA.length); hRatio.push(highN/bA.length);
+    }
     if(retN>0 && retWSum>0){
       const eqRet = retSum/retN;
       const sizeRet = retW/retWSum;
@@ -487,7 +503,8 @@ function computeAll() {
   }
   return {breadth:{dates:bd,median:bMed,mean:bMean,count:bCnt},
           premium:{dates:pd,median:pMed,mean:pMean,count:pCnt},
-          returns:{dates:rd,equal:rEq,size:rSize,count:rCnt}};
+          returns:{dates:rd,equal:rEq,size:rSize,count:rCnt},
+          highRatio:{dates:hd,ratio:hRatio,high:hHigh,total:hTotal}};
 }
 
 // ══ Plotly helpers ══════════════════════════════════════════════════════════
@@ -687,6 +704,27 @@ function renderReturnIndex(r){
   Plotly.react('plt-return',traces,layout,CFG);
 }
 
+function renderHighRatio(h){
+  const traces=[
+    {x:h.dates,y:h.total,name:'總掛牌檔數',type:'bar',
+     marker:{color:T().bar},hovertemplate:'%{y}檔<extra></extra>'},
+    {x:h.dates,y:h.ratio,name:`收盤價 >= ${cfg.highPriceThreshold} 比例`,type:'scatter',yaxis:'y2',
+     line:{color:T().c4,width:2},hovertemplate:'%{y:.1%}<extra></extra>'},
+    {x:h.dates,y:h.high,name:`>= ${cfg.highPriceThreshold} 檔數`,type:'scatter',yaxis:'y3',
+     line:{color:T().c1,width:1.4,dash:'dot'},hovertemplate:'%{y}檔<extra></extra>'},
+  ];
+  const layout=Object.assign(baseLayout(`CB 高價比例 — 收盤價 >= ${cfg.highPriceThreshold}`,h.dates),{
+    yaxis:  yAxis('總掛牌檔數'),
+    yaxis2: Object.assign(yAxis('高價比例','right','y'), {tickformat:'.0%', range:[0,1]}),
+    yaxis3: {overlaying:'y',side:'right',visible:false,showgrid:false},
+    shapes:[
+      {type:'line',xref:'paper',x0:0,x1:1,yref:'y2',y0:0.3,y1:0.3,
+       line:{color:T().annColor[1],width:1,dash:'dot'}},
+    ],
+  });
+  Plotly.react('plt-high-ratio',traces,layout,CFG);
+}
+
 function updateOverlayLine(key, checked){
   overlayLines[key]=checked;
   if(_lastIdx) {
@@ -718,9 +756,10 @@ function applyFilters(){
   renderPremium(_lastIdx.premium);
   renderOverlay(_lastIdx.breadth,_lastIdx.premium,_lastIdx.returns);
   renderReturnIndex(_lastIdx.returns);
+  renderHighRatio(_lastIdx.highRatio);
   const ms=(performance.now()-t0).toFixed(0);
   document.getElementById('f-status').textContent=
-    `${ms}ms · 廣度${_lastIdx.breadth.dates.length}天 溢價${_lastIdx.premium.dates.length}天 報酬${_lastIdx.returns.dates.length}天`;
+    `${ms}ms · 廣度${_lastIdx.breadth.dates.length}天 溢價${_lastIdx.premium.dates.length}天 報酬${_lastIdx.returns.dates.length}天 高價${_lastIdx.highRatio.dates.length}天`;
   const b=_lastIdx.breadth, last=b.dates[b.dates.length-1]||'';
   const med=b.median[b.median.length-1], cnt=b.count[b.count.length-1];
   document.getElementById('hdr-params').textContent=
