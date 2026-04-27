@@ -5,7 +5,7 @@ Outputs: output/cb_indices.html  — interactive dashboard
          - theme switcher (Light / Bloomberg Dark)
 """
 
-import sqlite3, time, json
+import sqlite3, time, json, os, sys
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -14,6 +14,8 @@ from pathlib import Path
 DB_PATH    = r"d:\VS Code\dbdownloader\data\finmind.db"
 OUTPUT_DIR = Path(r"d:\VS Code\CBMonitor\output")
 START_DATE = "2010-01-01"
+MARKET_START_DATE = "2003-01-01"
+DBDOWNLOADER_DIR = Path(r"d:\VS Code\dbdownloader")
 
 DEFAULTS = dict(
     useMaxPrice = True,
@@ -87,6 +89,50 @@ def prepare_raw_json(df: pd.DataFrame) -> str:
                  ).round().clip(0, 999999).astype(int)
     rows = df[["di","ci","_c","_u","_v","_p","_pa","_dl","_o"]].values.tolist()
     return json.dumps({"dates": dates, "cbids": cbids, "rows": rows}, separators=(",", ":"))
+
+def _load_finmind_config():
+    if DBDOWNLOADER_DIR.exists() and str(DBDOWNLOADER_DIR) not in sys.path:
+        sys.path.insert(0, str(DBDOWNLOADER_DIR))
+    try:
+        from config import FINMIND_TOKEN, API_BASE_URL
+    except Exception:
+        return os.getenv("FINMIND_TOKEN", ""), "https://api.finmindtrade.com/api/v4"
+    return FINMIND_TOKEN, API_BASE_URL
+
+def fetch_total_return_index(data_id: str, start_date: str = MARKET_START_DATE) -> pd.DataFrame:
+    import requests
+
+    token, api_base = _load_finmind_config()
+    params = {
+        "dataset": "TaiwanStockTotalReturnIndex",
+        "data_id": data_id,
+        "start_date": start_date,
+        "end_date": pd.Timestamp.today().strftime("%Y-%m-%d"),
+    }
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    resp = requests.get(f"{api_base}/data", headers=headers, params=params, timeout=60)
+    resp.raise_for_status()
+    result = resp.json()
+    if result.get("status") != 200:
+        raise RuntimeError(f"FinMind {data_id} error: {result.get('msg')}")
+    df = pd.DataFrame(result.get("data", []))
+    if df.empty:
+        return pd.DataFrame(columns=["date", "price"])
+    df = df[["date", "price"]].copy()
+    df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+    return df.dropna().sort_values("date")
+
+def prepare_market_json() -> str:
+    out = {}
+    for data_id, label in [("TAIEX", "TAIEX 報酬指數"), ("TPEx", "TPEx 報酬指數")]:
+        df = fetch_total_return_index(data_id)
+        out[data_id] = {
+            "label": label,
+            "dates": df["date"].tolist(),
+            "price": df["price"].round(4).tolist(),
+        }
+    return json.dumps(out, separators=(",", ":"))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -307,6 +353,7 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
 <script>
 // ══ Embedded data ══════════════════════════════════════════════════════════
 const _RAW      = __RAW_JSON__;
+const _MARKET   = __MARKET_JSON__;
 const _DEFAULTS = __DEFAULTS_JSON__;
 
 // Pre-index by date
@@ -502,6 +549,21 @@ function annLabel(y, text, color, yref='y'){ return {xref:'paper',x:1.01,yref,y,
 const CFG = {responsive:true,displayModeBar:true,scrollZoom:true,
              modeBarButtonsToRemove:['lasso2d','select2d']};
 
+function alignMarketReturn(market, targetDates){
+  if(!market || !market.dates?.length || !targetDates?.length) return {dates:[],ret:[]};
+  const priceByDate = new Map(market.dates.map((d,i)=>[d,market.price[i]]));
+  let base = null;
+  const dates=[], ret=[];
+  for(const d of targetDates){
+    const px = priceByDate.get(d);
+    if(px == null || px <= 0) continue;
+    if(base == null) base = px;
+    dates.push(d);
+    ret.push(px/base-1);
+  }
+  return {dates,ret};
+}
+
 // ══ Render ══════════════════════════════════════════════════════════════════
 const overlayLines = {
   premMed:true,premMean:true,priceMed:true,priceMean:true,retEq:true,retSize:true
@@ -603,6 +665,8 @@ function renderOverlay(b,p,r){
 }
 
 function renderReturnIndex(r){
+  const taiex = alignMarketReturn(_MARKET.TAIEX, r.dates);
+  const tpex = alignMarketReturn(_MARKET.TPEx, r.dates);
   const traces=[
     {x:r.dates,y:r.count,name:'有效報酬檔數',type:'bar',
      marker:{color:T().bar},hovertemplate:'%{y}檔<extra></extra>'},
@@ -610,6 +674,10 @@ function renderReturnIndex(r){
      line:{color:T().c1,width:2}},
     {x:r.dates,y:r.size.map(v=>v/100-1),name:'發行規模加權累積報酬率',type:'scatter',yaxis:'y2',
      line:{color:T().c3,width:2}},
+    {x:taiex.dates,y:taiex.ret,name:'TAIEX 報酬率',type:'scatter',yaxis:'y2',
+     line:{color:'#FF9800',width:1.8,dash:'dash'}},
+    {x:tpex.dates,y:tpex.ret,name:'TPEx 報酬率',type:'scatter',yaxis:'y2',
+     line:{color:'#607D8B',width:1.8,dash:'dash'}},
   ];
   const layout=Object.assign(baseLayout('CB 累積報酬率 — 平均 vs 發行規模加權',r.dates),{
     yaxis:  yAxis('有效報酬檔數'),
@@ -701,9 +769,10 @@ window.addEventListener('load',()=>{ applyFilters(); setTimeout(resizeAll,200); 
 """
 
 # ── Generate HTML ─────────────────────────────────────────────────────────────
-def make_html(raw_json: str) -> str:
+def make_html(raw_json: str, market_json: str) -> str:
     defaults_json = json.dumps(DEFAULTS, separators=(",",":"))
     html = _HTML.replace("__RAW_JSON__", raw_json) \
+                .replace("__MARKET_JSON__", market_json) \
                 .replace("__DEFAULTS_JSON__", defaults_json)
     for k, v in DEFAULTS.items():
         html = html.replace(f"__{k}__", str(v))
@@ -723,8 +792,11 @@ def main():
     p("Serialising embed data …")
     raw_json = prepare_raw_json(df)
     p(f"  JSON {len(raw_json)/1024/1024:.1f} MB  ({time.time()-t0:.1f}s)")
+    p("Fetching market total return indices …")
+    market_json = prepare_market_json()
+    p(f"  Market JSON {len(market_json)/1024:.1f} KB  ({time.time()-t0:.1f}s)")
     p("Building HTML …")
-    html = make_html(raw_json)
+    html = make_html(raw_json, market_json)
     out = OUTPUT_DIR / "cb_indices.html"
     out.write_text(html, encoding="utf-8")
     p(f"  → {out}  ({time.time()-t0:.1f}s)  file: {out.stat().st_size/1024/1024:.1f} MB")
