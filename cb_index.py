@@ -13,7 +13,7 @@ from pathlib import Path
 # ── Config ────────────────────────────────────────────────────────────────────
 DB_PATH    = r"d:\VS Code\dbdownloader\data\finmind.db"
 OUTPUT_DIR = Path(r"d:\VS Code\CBMonitor\output")
-START_DATE = "2015-01-01"
+START_DATE = "2010-01-01"
 
 DEFAULTS = dict(
     useMaxPrice = True,
