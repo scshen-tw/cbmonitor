@@ -16,9 +16,13 @@ OUTPUT_DIR = Path(r"d:\VS Code\CBMonitor\output")
 START_DATE = "2015-01-01"
 
 DEFAULTS = dict(
+    useMaxPrice = True,
     maxPrice    = 200,
+    useMinMaturity = True,
     minMaturity = 90,
+    useParityLo = True,
     parityLo    = 95,
+    useParityHi = True,
     parityHi    = 105,
 )
 
@@ -171,13 +175,15 @@ header{flex-shrink:0;padding:9px 16px;display:flex;
   border-radius:3px;margin-bottom:8px}
 .f-note{font-size:.7rem;line-height:1.35;margin:-2px 0 8px;color:#777}
 .f-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.f-row label{font-size:.75rem;width:108px;flex-shrink:0;line-height:1.3}
+.f-row label{font-size:.75rem;width:92px;flex-shrink:0;line-height:1.3}
+.f-row input[type=checkbox]{width:15px;height:15px;flex-shrink:0;accent-color:#3f51b5}
 .f-row .f-suffix{font-size:.75rem;white-space:nowrap}
 .f-row input[type=number]{
   width:72px;padding:4px 6px;border-radius:4px;font-size:.85rem;font-weight:600;
   text-align:right;border:1px solid #bbb;outline:none;transition:border .15s}
 .f-row input[type=number]:focus{border-color:#3f51b5}
 body.bbg .f-row input[type=number]{background:#1A1A1A;border-color:#333;color:#FF9900}
+body.bbg .f-row input[type=checkbox]{accent-color:#FF6600}
 body.bbg .f-row input[type=number]:focus{border-color:#FF6600}
 body.bbg .f-note{color:#777}
 #btn-apply,#btn-reset{width:100%;border:none;border-radius:4px;cursor:pointer;font-weight:600}
@@ -227,23 +233,23 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
       <div class="f-section">
         <h3>套用全部圖表</h3>
         <div class="f-note">影響：市場廣度、全市場溢價率、疊加圖、CB報酬指數</div>
-        <div class="f-row"><label>剔除收盤價</label>
+        <div class="f-row"><input type="checkbox" id="f-useMaxPrice" checked onchange="syncVal('useMaxPrice',this.checked)">
+          <label>剔除收盤價</label>
           <input type="number" id="f-maxPrice" min="100" max="500" step="5" value="__maxPrice__"
                  onchange="syncVal('maxPrice',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以上</span></div>
-        <div class="f-row"><label>剔除剩餘天數</label>
+        <div class="f-row"><input type="checkbox" id="f-useMinMaturity" checked onchange="syncVal('useMinMaturity',this.checked)">
+          <label>剔除剩餘天數</label>
           <input type="number" id="f-minMaturity" min="0" max="730" step="5" value="__minMaturity__"
                  onchange="syncVal('minMaturity',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以下</span></div>
-      </div>
-      <div class="f-section">
-        <h3>只套用溢價率圖表</h3>
-        <div class="f-note">影響：全市場溢價率、疊加圖中的溢價率線</div>
-        <div class="f-row"><label>溢價 parity</label>
+        <div class="f-row"><input type="checkbox" id="f-useParityLo" checked onchange="syncVal('useParityLo',this.checked)">
+          <label>parity</label>
           <input type="number" id="f-parityLo" min="0" max="300" step="1" value="__parityLo__"
                  onchange="syncVal('parityLo',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以上</span></div>
-        <div class="f-row"><label>溢價 parity</label>
+        <div class="f-row"><input type="checkbox" id="f-useParityHi" checked onchange="syncVal('useParityHi',this.checked)">
+          <label>parity</label>
           <input type="number" id="f-parityHi" min="0" max="300" step="1" value="__parityHi__"
                  onchange="syncVal('parityHi',+this.value)" onkeydown="enterApply(event)">
           <span class="f-suffix">以下</span></div>
@@ -350,7 +356,10 @@ function resetFilters() {
   cfg = Object.assign({}, _DEFAULTS);
   for (const k of Object.keys(_DEFAULTS)) {
     const el = document.getElementById('f-'+k);
-    if (el) el.value = _DEFAULTS[k];
+    if (el) {
+      if (el.type === 'checkbox') el.checked = _DEFAULTS[k];
+      else el.value = _DEFAULTS[k];
+    }
   }
   applyFilters();
 }
@@ -365,7 +374,10 @@ function median(a) {
 
 function computeAll() {
   const N = _RAW.dates.length;
-  const {maxPrice,minMaturity,parityLo,parityHi} = cfg;
+  const {
+    useMaxPrice,maxPrice,useMinMaturity,minMaturity,
+    useParityLo,parityLo,useParityHi,parityHi
+  } = cfg;
   const bd=[],bMed=[],bMean=[],bCnt=[];
   const pd=[],pMed=[],pMean=[],pCnt=[];
   const rd=[],rEq=[],rSize=[],rCnt=[];
@@ -384,11 +396,13 @@ function computeAll() {
       if(u<=0) continue;
       const cl=c/10;
       currentClose.push([ci,cl]);
-      if(cl>=maxPrice) continue;
-      if(dl>=0&&dl<=minMaturity) continue;
-      bA.push(cl);
       const parity=pa/10;
-      if(p!==-9999 && parity>=parityLo && parity<=parityHi) pA.push(p/10000);
+      if(useMaxPrice && cl>=maxPrice) continue;
+      if(useMinMaturity && dl>=0&&dl<=minMaturity) continue;
+      if(useParityLo && parity<parityLo) continue;
+      if(useParityHi && parity>parityHi) continue;
+      bA.push(cl);
+      if(p!==-9999) pA.push(p/10000);
       const prev = prevClose.get(ci);
       if(prev>0){
         const ret = cl/prev - 1;
