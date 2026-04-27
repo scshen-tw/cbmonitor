@@ -334,6 +334,7 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
               <option value="premium" selected>溢價率</option>
               <option value="price">收盤價</option>
               <option value="return">報酬指數</option>
+              <option value="highRatio">高價比例</option>
             </select>
           </label>
           <label>右軸
@@ -341,6 +342,7 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
               <option value="premium">溢價率</option>
               <option value="price" selected>收盤價</option>
               <option value="return">報酬指數</option>
+              <option value="highRatio">高價比例</option>
             </select>
           </label>
           <label><input type="checkbox" id="ov-prem-med" checked onchange="updateOverlayLine('premMed',this.checked)">溢價中位</label>
@@ -349,6 +351,7 @@ body.bbg .overlay-tools input{accent-color:#FF6600}
           <label><input type="checkbox" id="ov-price-mean" checked onchange="updateOverlayLine('priceMean',this.checked)">收盤平均</label>
           <label><input type="checkbox" id="ov-ret-eq" checked onchange="updateOverlayLine('retEq',this.checked)">平均報酬</label>
           <label><input type="checkbox" id="ov-ret-size" checked onchange="updateOverlayLine('retSize',this.checked)">規模加權報酬</label>
+          <label><input type="checkbox" id="ov-high-ratio" checked onchange="updateOverlayLine('highRatio',this.checked)">高價比例</label>
         </div>
         <div id="plt-overlay" class="overlay-plot"></div>
       </div>
@@ -583,7 +586,7 @@ function alignMarketReturn(market, targetDates){
 
 // ══ Render ══════════════════════════════════════════════════════════════════
 const overlayLines = {
-  premMed:true,premMean:true,priceMed:true,priceMean:true,retEq:true,retSize:true
+  premMed:true,premMean:true,priceMed:true,priceMean:true,retEq:true,retSize:true,highRatio:true
 };
 const overlayAxes = {left:'premium',right:'price'};
 
@@ -635,12 +638,17 @@ function metricAxis(metric, side='left', overlay=null){
     return overlay ? Object.assign(ax,{overlaying:overlay,side}) : ax;
   }
   if(metric==='price') return yAxis('收盤價 (每百元面額)',side,overlay);
+  if(metric==='highRatio') {
+    const ax = Object.assign(yAxis('高價比例',side,overlay), {tickformat:'.0%', range:[0,1]});
+    return ax;
+  }
   return yAxis('報酬指數',side,overlay);
 }
 function metricTitle(metric){
-  return metric==='premium' ? '溢價率' : metric==='price' ? '收盤價' : '報酬指數';
+  return metric==='premium' ? '溢價率' : metric==='price' ? '收盤價' :
+    metric==='highRatio' ? '高價比例' : '報酬指數';
 }
-function addOverlayMetricTraces(traces, metric, axis, b, p, r){
+function addOverlayMetricTraces(traces, metric, axis, b, p, r, h){
   const yaxis = axis==='y2' ? 'y2' : undefined;
   if(metric==='premium'){
     if(overlayLines.premMed) traces.push({x:p.dates,y:p.median,name:'溢價率中位數',type:'scatter',
@@ -653,17 +661,22 @@ function addOverlayMetricTraces(traces, metric, axis, b, p, r){
     if(overlayLines.priceMean) traces.push({x:b.dates,y:b.mean,name:'收盤價平均數',type:'scatter',
       yaxis,line:{color:T().c3,width:2,dash:'dot'}});
   } else {
+    if(metric==='highRatio'){
+      if(overlayLines.highRatio) traces.push({x:h.dates,y:h.ratio,name:`高價比例 >= ${cfg.highPriceThreshold}`,type:'scatter',
+        yaxis,line:{color:'#795548',width:2}});
+      return;
+    }
     if(overlayLines.retEq) traces.push({x:r.dates,y:r.equal,name:'平均報酬指數',type:'scatter',
       yaxis,line:{color:'#009688',width:2}});
     if(overlayLines.retSize) traces.push({x:r.dates,y:r.size,name:'規模加權報酬指數',type:'scatter',
       yaxis,line:{color:'#FF3366',width:2,dash:'dot'}});
   }
 }
-function renderOverlay(b,p,r){
-  const dates = [...new Set([...b.dates, ...p.dates, ...r.dates])].sort();
+function renderOverlay(b,p,r,h){
+  const dates = [...new Set([...b.dates, ...p.dates, ...r.dates, ...h.dates])].sort();
   const traces=[];
-  addOverlayMetricTraces(traces,overlayAxes.left,'y',b,p,r);
-  addOverlayMetricTraces(traces,overlayAxes.right,'y2',b,p,r);
+  addOverlayMetricTraces(traces,overlayAxes.left,'y',b,p,r,h);
+  addOverlayMetricTraces(traces,overlayAxes.right,'y2',b,p,r,h);
   const shapes=[];
   if(overlayAxes.left==='premium') shapes.push(
     {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:0,y1:0,
@@ -673,6 +686,12 @@ function renderOverlay(b,p,r){
      line:{color:T().font,width:1,dash:'dash'}});
   if(overlayAxes.left==='price'||overlayAxes.left==='return') shapes.push(refLine(100,T().annColor[2],'y'));
   if(overlayAxes.right==='price'||overlayAxes.right==='return') shapes.push(refLine(100,T().annColor[2],'y2'));
+  if(overlayAxes.left==='highRatio') shapes.push(
+    {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:0.3,y1:0.3,
+     line:{color:T().annColor[1],width:1,dash:'dot'}});
+  if(overlayAxes.right==='highRatio') shapes.push(
+    {type:'line',xref:'paper',x0:0,x1:1,yref:'y2',y0:0.3,y1:0.3,
+     line:{color:T().annColor[1],width:1,dash:'dot'}});
   const layout=Object.assign(baseLayout(`疊加圖 — ${metricTitle(overlayAxes.left)} vs ${metricTitle(overlayAxes.right)}`,dates),{
     yaxis:  metricAxis(overlayAxes.left),
     yaxis2: metricAxis(overlayAxes.right,'right','y'),
@@ -728,7 +747,7 @@ function renderHighRatio(h){
 function updateOverlayLine(key, checked){
   overlayLines[key]=checked;
   if(_lastIdx) {
-    renderOverlay(_lastIdx.breadth,_lastIdx.premium,_lastIdx.returns);
+    renderOverlay(_lastIdx.breadth,_lastIdx.premium,_lastIdx.returns,_lastIdx.highRatio);
     setTimeout(resizeActive,30);
   }
 }
@@ -741,7 +760,7 @@ function updateOverlayAxis(side, metric){
   }
   overlayAxes[side]=metric;
   if(_lastIdx) {
-    renderOverlay(_lastIdx.breadth,_lastIdx.premium,_lastIdx.returns);
+    renderOverlay(_lastIdx.breadth,_lastIdx.premium,_lastIdx.returns,_lastIdx.highRatio);
     setTimeout(resizeActive,30);
   }
 }
@@ -754,7 +773,7 @@ function applyFilters(){
   _lastIdx=computeAll();
   renderBreadth(_lastIdx.breadth);
   renderPremium(_lastIdx.premium);
-  renderOverlay(_lastIdx.breadth,_lastIdx.premium,_lastIdx.returns);
+  renderOverlay(_lastIdx.breadth,_lastIdx.premium,_lastIdx.returns,_lastIdx.highRatio);
   renderReturnIndex(_lastIdx.returns);
   renderHighRatio(_lastIdx.highRatio);
   const ms=(performance.now()-t0).toFixed(0);
